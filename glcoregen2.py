@@ -7,6 +7,8 @@ import xml.etree.ElementTree as etree
 
 EXT_FILE = ''
 CORE_PROFILE = ''
+COMMANDS = []
+EXTENTIONS = []
 
 # Check if arg is a valid file that already exists on the file system
 def is_valid_file(parser, arg):
@@ -24,38 +26,34 @@ def get_parser():
 	parser.add_argument('-p', '--profile', dest='profile', help='Core profile GL, ES (default: GL)', metavar='PROFILE', default='GL')
 	return parser
 
-if __name__ == '__main__':
-	args = get_parser().parse_args()
-	print('Get features and extentions from ' + args.ext_file)
-	print('With core profile ' + args.profile)
-	EXT_FILE = args.ext_file
-	CORE_PROFILE = args.profile
-
 # Create directories
-if not os.path.exists('include/GL'):
-    os.makedirs('include/GL')
-if not os.path.exists('src'):
-    os.makedirs('src')
-if not os.path.exists('spec'):
-    os.makedirs('spec')
+def create_directories():
+	if not os.path.exists('include/GL'):
+		os.makedirs('include/GL')
+	if not os.path.exists('src'):
+		os.makedirs('src')
+	if not os.path.exists('spec'):
+		os.makedirs('spec')
 
 # Download glcorearb.h
-if not os.path.exists('include/GL/glcorearb.h'):
-    print('Downloading glcorearb.h to include/GL...')
-    web = urllib.request.urlopen('http://www.opengl.org/registry/api/glcorearb.h')
-    with open('include/GL/glcorearb.h', 'wb') as f:
-        f.writelines(web.readlines())
-else:
-    print('Reusing glcorearb.h from include/GL...')
+def download_headers():
+	if not os.path.exists('include/GL/glcorearb.h'):
+		print('Downloading glcorearb.h to include/GL...')
+		web = urllib.request.urlopen('http://www.opengl.org/registry/api/glcorearb.h')
+		with open('include/GL/glcorearb.h', 'wb') as f:
+		    f.writelines(web.readlines())
+	else:
+		print('Reusing glcorearb.h from include/GL...')
 
 # Download gl.xml
-if not os.path.exists('spec/gl.xml'):
-    print('Downloading gl.xml...')
-    web = urllib.request.urlopen('https://cvs.khronos.org/svn/repos/ogl/trunk/doc/registry/public/api/gl.xml')
-    with open('spec/gl.xml', 'wb') as f:
-        f.writelines(web.readlines())
-else:
-    print('Reusing gl.xml from spec/...')
+def download_specifications():
+	if not os.path.exists('spec/gl.xml'):
+		print('Downloading gl.xml...')
+		web = urllib.request.urlopen('https://cvs.khronos.org/svn/repos/ogl/trunk/doc/registry/public/api/gl.xml')
+		with open('spec/gl.xml', 'wb') as f:
+		    f.writelines(web.readlines())
+	else:
+		print('Reusing gl.xml from spec/...')
 
 def proc_t(proc):
     return { 'name': proc,
@@ -63,62 +61,68 @@ def proc_t(proc):
              'prototype': 'PFN' + proc.upper() + 'PROC' }
 
 # Read config
-with open(EXT_FILE, 'r') as f:
-	extentions_needed = f.read().splitlines()
-	f.close()
-
+def read_config():
+	global EXTENTIONS
+	with open(EXT_FILE, 'r') as f:
+		EXTENTIONS = f.read().splitlines()
+		f.close()
+	
 # Parce gl.xml
-tree = etree.parse('spec/gl.xml')
-root = tree.getroot()
+def parce_specifications():
+	global COMMANDS
+	tree = etree.parse('spec/gl.xml')
+	root = tree.getroot()
 
-all_commands = root.findall('commands')
-all_commands = all_commands[0].findall('command')
+	all_commands = root.findall('commands')
+	all_commands = all_commands[0].findall('command')
 
 # Parce features
-requirements = []
-features = root.findall('feature')
-print('Features:')
-for feature in features:
-	if feature.attrib['name'] in extentions_needed:
-		print('\t' + feature.attrib['name'])
-		for require in feature.findall('require'):
-			if require.attrib.get('profile') != 'compatibility':
-				requirements.append(require)
+	requirements = []
+	features = root.findall('feature')
+	print('Features:')
+	for feature in features:
+		if feature.attrib['name'] in EXTENTIONS:
+			print('\t' + feature.attrib['name'])
+			for require in feature.findall('require'):
+				if require.attrib.get('profile') != 'compatibility':
+					requirements.append(require)
 
 # Build commands list
-commands = []
 
-for require in requirements:
-	for command in require.findall('command'):
-		commands.append(command.attrib['name'])
+	for require in requirements:
+		for command in require.findall('command'):
+			COMMANDS.append(command.attrib['name'])
 
-remove_commands = []
+	remove_commands = []
 
 # remove commands with remove features
-for feature in features:
-	if feature.attrib['name'] in extentions_needed:
-		for require in feature.findall('require'):
-			for remove in feature.findall('remove'):
-				for command in remove.findall('command'):
-					remove_commands.append(command.attrib['name'])
+	for feature in features:
+		if feature.attrib['name'] in EXTENTIONS:
+			for require in feature.findall('require'):
+				for remove in feature.findall('remove'):
+					for command in remove.findall('command'):
+						remove_commands.append(command.attrib['name'])
 
-commands = [command for command in commands if command not in remove_commands]
+	COMMANDS = [command for command in COMMANDS if command not in remove_commands]
 
 # Parce extensions
-print('Extensions:')
-extensions = root.find('extensions').findall('extension')
-for extension in extensions:
-	if extension.attrib['name'] in extentions_needed:
-		print('\t' + extension.attrib['name'])
-		for require in feature.findall('require'):
-			for command in require.findall('command'):
-				commands.append(command.attrib['name'])
+	print('Extensions:')
+	extensions = root.find('extensions').findall('extension')
+	for extension in extensions:
+		if extension.attrib['name'] in EXTENTIONS:
+			print('\t' + extension.attrib['name'])
+			for require in feature.findall('require'):
+				for command in require.findall('command'):
+					COMMANDS.append(command.attrib['name'])
 
 # Generate glcore.h
-print('Generating glcore.h in include/GL...')
-with open('include/GL/glcore.h', 'wb') as f:
-	f.write(bytes('''/* Generated by glcoregen v2 */
+def generate_headers():
+	global COMMANDS
+	print('Generating glcore.h in include/GL...')
+	with open('include/GL/glcore.h', 'wb') as f:
+		f.write(bytes('''/* Generated by glcoregen v2 */
 #pragma once
+
 #include <GL/glcorearb.h>
 
 #ifndef __gl_h_
@@ -135,24 +139,25 @@ void *nativeGetProcAddress(const char *proc);
 
 /* OpenGL functions */
 ''', 'utf8'))	
-	for command in commands:
-		proc = proc_t(command)
-		f.write(bytes('extern %s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
-	for command in commands:
-		proc = proc_t(command)
-		f.write(bytes('#define %s %s\n' % (proc['name'], proc['variable']), 'utf8'))
-	f.write(bytes('''
+		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('extern %s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
+		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('#define %s %s\n' % (proc['name'], proc['variable']), 'utf8'))
+		f.write(bytes('''
 #ifdef __cplusplus
 }
 #endif
 
 ''', 'utf8'))
-	f.close()
+		f.close()
 
 # Generate glcore.c
-print('Generating glcore.c in src/GL...')
-with open('src/glcore.c', 'wb') as f:
-	f.write(bytes('''/* Generated by glcoregen v2 */
+def genrate_sources():
+	print('Generating glcore.c in src/GL...')
+	with open('src/glcore.c', 'wb') as f:
+		f.write(bytes('''/* Generated by glcoregen v2 */
 #include <GL/glcore.h>
 
 #ifdef USING_SDL
@@ -288,15 +293,34 @@ void *nativeGetProcAddress(const char *proc)
 }
 
 ''', 'utf8'))
-	for command in commands:
-		proc = proc_t(command)
-		f.write(bytes('%s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
-	f.write(bytes('''
+		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('%s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
+		f.write(bytes('''
 static void load_procs(void)
 {
 ''', 'utf8'))
-	for command in commands:
-		proc = proc_t(command)
-		f.write(bytes('\t%s = (%s) get_proc(\"%s\");\n' % (proc['variable'], proc['prototype'], proc['name']), "utf8"))
-	f.write(bytes('}\n', 'utf8'))
-	f.close()
+		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('\t%s = (%s) get_proc(\"%s\");\n' % (proc['variable'], proc['prototype'], proc['name']), "utf8"))
+		f.write(bytes('}\n', 'utf8'))
+		f.close()
+
+def main():
+	global EXT_FILE
+	global CORE_PROFILE
+	args = get_parser().parse_args()
+	print('Get features and extentions from ' + args.ext_file)
+	print('With core profile ' + args.profile)
+	EXT_FILE = args.ext_file
+	CORE_PROFILE = args.profile
+	create_directories()
+	download_headers()
+	download_specifications()
+	read_config()
+	parce_specifications()
+	generate_headers()
+	genrate_sources()
+
+if __name__ == '__main__':
+	main()

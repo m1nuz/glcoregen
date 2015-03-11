@@ -1,6 +1,35 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
 import os
 import urllib.request, urllib.parse, urllib.error
-import xml.etree.ElementTree as etree 
+import xml.etree.ElementTree as etree
+
+EXT_FILE = ''
+CORE_PROFILE = ''
+
+# Check if arg is a valid file that already exists on the file system
+def is_valid_file(parser, arg):
+	arg = os.path.abspath(arg)
+	if not os.path.exists(arg):
+		parser.error('The file %s does not exist!' % arg)
+	else:
+		return arg
+
+# Parce command line
+def get_parser():
+	from argparse import ArgumentParser
+	parser = ArgumentParser()
+	parser.add_argument('-f', '--file', dest='ext_file', type=lambda x: is_valid_file(parser, x), help='features and extentions text file', metavar='FILE')
+	parser.add_argument('-p', '--profile', dest='profile', help='Core profile GL, ES (default: GL)', metavar='PROFILE', default='GL')
+	return parser
+
+if __name__ == '__main__':
+	args = get_parser().parse_args()
+	print('Get features and extentions from ' + args.ext_file)
+	print('With core profile ' + args.profile)
+	EXT_FILE = args.ext_file
+	CORE_PROFILE = args.profile
 
 # Create directories
 if not os.path.exists('include/GL'):
@@ -34,7 +63,7 @@ def proc_t(proc):
              'prototype': 'PFN' + proc.upper() + 'PROC' }
 
 # Read config
-with open('gl33.txt', 'r') as f:
+with open(EXT_FILE, 'r') as f:
 	extentions_needed = f.read().splitlines()
 	f.close()
 
@@ -48,9 +77,10 @@ all_commands = all_commands[0].findall('command')
 # Parce features
 requirements = []
 features = root.findall('feature')
+print('Features:')
 for feature in features:
 	if feature.attrib['name'] in extentions_needed:
-		print(feature.attrib['name'])
+		print('\t' + feature.attrib['name'])
 		for require in feature.findall('require'):
 			if require.attrib.get('profile') != 'compatibility':
 				requirements.append(require)
@@ -75,9 +105,11 @@ for feature in features:
 commands = [command for command in commands if command not in remove_commands]
 
 # Parce extensions
+print('Extensions:')
 extensions = root.find('extensions').findall('extension')
 for extension in extensions:
 	if extension.attrib['name'] in extentions_needed:
+		print('\t' + extension.attrib['name'])
 		for require in feature.findall('require'):
 			for command in require.findall('command'):
 				commands.append(command.attrib['name'])

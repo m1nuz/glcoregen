@@ -1,10 +1,9 @@
 #pragma once
 
-#define USE_OPENGL_33
+//#define USE_OPENGL_33
 //#define USE_OPENGL_43
 //#define USE_OPENGL_45
-//#define USE_OPENGL_ES2
-#define USE_SDL_FRAMEWORK
+#define USE_OPENGL_ES2
 
 #ifdef USE_OPENGL_33
 #define OPENGL_MAJOR_VERSION 3
@@ -42,7 +41,7 @@
 #endif
 
 #ifdef USE_OPENGL_ES2
-#include <GLES2/gles2core.h>
+#include <GL/glcore.h>
 #endif
 
 #ifdef __cplusplus

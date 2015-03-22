@@ -5,10 +5,13 @@ import os
 import urllib.request, urllib.parse, urllib.error
 import xml.etree.ElementTree as etree
 
+CORE_FILE = ''
 EXT_FILE = ''
 CORE_PROFILE = 'GL'
 COMMANDS = []
 COMMANDS_PROTO = []
+EXT_COMMANDS = []
+FEATURES = []
 EXTENTIONS = []
 GEN_HEADER = 'glcore.h'
 GEN_SOURCE = 'glcore.c'
@@ -38,8 +41,11 @@ def is_valid_file(parser, arg):
 def get_parser():
 	from argparse import ArgumentParser
 	parser = ArgumentParser()
-	parser.add_argument('-f', '--file', dest='ext_file', type=lambda x: is_valid_file(parser, x), help='features and extentions text file', metavar='FILE')
+	parser.add_argument('-f', '--file', dest='core_file', type=lambda x: is_valid_file(parser, x), help='features text file', metavar='FILE', default=None)
+	parser.add_argument('-e', '--ext', dest='ext_file', type=lambda x: is_valid_file(parser, x), help='extentions text file', metavar='FILE', default=None)
 	parser.add_argument('-p', '--profile', dest='profile', help='Core profile GL, ES2, ES3 (default: GL)', metavar='PROFILE', default='GL')
+	parser.add_argument('-gh', '--header', dest='header', help='Generated header file (default: glcore.h)', metavar='HEADER', default='glcore.h')
+	parser.add_argument('-gs', '--source', dest='source', help='Generated source file (default: glcore.c)', metavar='SOURCE', default='glcore.c')
 	return parser
 
 # Create directories
@@ -84,11 +90,20 @@ def proc_t(proc):
              'prototype': 'PFN' + proc.upper() + 'PROC' }
 
 # Read config
-def read_config():
+def read_configs():
+	global CORE_FILE
+	global EXT_FILE
+	global FEATURES
 	global EXTENTIONS
-	with open(EXT_FILE, 'r') as f:
-		EXTENTIONS = f.read().splitlines()
+
+	with open(CORE_FILE, 'r') as f:
+		FEATURES = f.read().splitlines()
 		f.close()
+	
+	if EXT_FILE:
+		with open(EXT_FILE, 'r') as f:
+			EXTENTIONS = f.read().splitlines()
+			f.close()
 
 def find_command(proc_name):
 	global COMMANDS_PROTO
@@ -127,6 +142,7 @@ def get_proto(proc_name):
 def parce_specifications():
 	global COMMANDS
 	global COMMANDS_PROTO
+	global EXT_COMMANDS
 	tree = etree.parse('spec/gl.xml')
 	root = tree.getroot()
 
@@ -134,13 +150,13 @@ def parce_specifications():
 	COMMANDS_PROTO = all_commands[0].findall('command')
 
 	#print(find_command('glCheckFramebufferStatus').find('proto').find('name').text)
-	print(get_proto('glGetShaderiv'))
+	#print(get_proto('glGetShaderiv'))
 # Parce features
 	requirements = []
 	features = root.findall('feature')
 	print('Features:')
 	for feature in features:
-		if feature.attrib['name'] in EXTENTIONS:
+		if feature.attrib['name'] in FEATURES:
 			print('\t' + feature.attrib['name'])
 			for require in feature.findall('require'):
 				if require.attrib.get('profile') != 'compatibility':
@@ -156,7 +172,7 @@ def parce_specifications():
 
 # remove commands with remove features
 	for feature in features:
-		if feature.attrib['name'] in EXTENTIONS:
+		if feature.attrib['name'] in FEATURES:
 			for require in feature.findall('require'):
 				for remove in feature.findall('remove'):
 					for command in remove.findall('command'):
@@ -170,10 +186,11 @@ def parce_specifications():
 	for extension in extensions:
 		if extension.attrib['name'] in EXTENTIONS:
 			print('\t' + extension.attrib['name'])
-			for require in feature.findall('require'):
+			for require in extension.findall('require'):
 				for command in require.findall('command'):
-					COMMANDS.append(command.attrib['name'])
-
+					EXT_COMMANDS.append(command.attrib['name'])
+					#print(command.attrib['name'])
+					
 # Generate glcore.h
 def generate_gl_header():
 	global COMMANDS
@@ -193,8 +210,9 @@ def generate_gl_header():
 extern "C" {
 #endif
 
-/* Core GL API */
+/* GLcore API */
 int glLoadFunctions(void);
+int glLoadExtensions(void);
 void *nativeGetProcAddress(const char *proc);
 
 /* OpenGL functions */
@@ -203,6 +221,21 @@ void *nativeGetProcAddress(const char *proc);
 			proc = proc_t(command)
 			f.write(bytes('extern %s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
 		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('#define %s %s\n' % (proc['name'], proc['variable']), 'utf8'))
+		f.write(bytes('''
+/* Extensions functions prototypes */
+''', 'utf8'))
+		for command in EXT_COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('%s\n' % get_proto(proc['name']), 'utf8'))
+		f.write(bytes('''
+/* Extensions functions */
+''', 'utf8'))
+		for command in EXT_COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('extern %s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
+		for command in EXT_COMMANDS:
 			proc = proc_t(command)
 			f.write(bytes('#define %s %s\n' % (proc['name'], proc['variable']), 'utf8'))
 		f.write(bytes('''
@@ -385,11 +418,20 @@ static void *get_proc(const char *proc)
 #endif /* USING_SDL */
 
 static void load_procs(void);
+static void load_exts(void);
 
 int glLoadFunctions(void)
 {
 	open_libgl();
 	load_procs();
+	close_libgl();
+	return 1;
+}
+
+int glLoadExtensions(void)
+{
+	open_libgl();
+	load_exts();
 	close_libgl();
 	return 1;
 }
@@ -408,6 +450,18 @@ static void load_procs(void)
 {
 ''', 'utf8'))
 		for command in COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('\t%s = (%s) get_proc(\"%s\");\n' % (proc['variable'], proc['prototype'], proc['name']), "utf8"))
+		f.write(bytes('}\n', 'utf8'))
+
+		for command in EXT_COMMANDS:
+			proc = proc_t(command)
+			f.write(bytes('%s %s;\n' % (proc['prototype'], proc['variable']), "utf8"))
+		f.write(bytes('''
+static void load_exts(void)
+{
+''', 'utf8'))
+		for command in EXT_COMMANDS:
 			proc = proc_t(command)
 			f.write(bytes('\t%s = (%s) get_proc(\"%s\");\n' % (proc['variable'], proc['prototype'], proc['name']), "utf8"))
 		f.write(bytes('}\n', 'utf8'))
@@ -465,13 +519,19 @@ static void load_procs(void)
 		f.close()
 
 def main():
-	global EXT_FILE
+	global CORE_FILE
 	global CORE_PROFILE
+	global GEN_HEADER
+	global GEN_SOURCE
+	global EXT_FILE
 	args = get_parser().parse_args()
-	print('Get features and extentions from ' + args.ext_file)
+	print('Get features and extentions from:\n \t' + args.core_file + ' \n\t' + noneStr(args.ext_file))
 	print('With core profile ' + args.profile)
+	CORE_FILE = args.core_file
 	EXT_FILE = args.ext_file
 	CORE_PROFILE = args.profile
+	GEN_HEADER = args.header
+	GEN_SOURCE = args.source
 
 	generate_header = None
 	generate_source = None
@@ -485,7 +545,7 @@ def main():
 	create_directories()
 	download_headers()
 	download_specifications()
-	read_config()
+	read_configs()
 	parce_specifications()
 	generate_header()
 	generate_source()

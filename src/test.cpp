@@ -62,6 +62,26 @@ char fragment_shader_text[] =
 };
 #endif // USE_OPENGL_33
 
+#ifdef USE_OPENGL_43
+char vertex_shader_text[] =
+{
+    "#version 430 core\n"
+    "layout(location = 0) in vec3 vertex;\n"
+    "void main() {\n"
+    "gl_Position = vec4(vertex, 1.0);\n"
+    "}"
+};
+
+char fragment_shader_text[] =
+{
+    "#version 430 core\n"
+    "out vec4 color;\n"
+    "void main() {\n"
+    "color = vec4(1, 0, 0, 1);\n"
+    "}"
+};
+#endif // USE_OPENGL_33
+
 #ifdef USE_OPENGL_ES2
 char vertex_shader_text[] =
 {
@@ -188,14 +208,18 @@ main(int argc, char *argv[])
     const char *renderer = (const char*)glGetString(GL_RENDERER);
     const char *vendor = (const char*)glGetString(GL_VENDOR);
     const char *glsl_version = (const char*)glGetString(GL_SHADING_LANGUAGE_VERSION);
-    const char *extensions = (const char*)glGetString(GL_EXTENSIONS);;
 
     printf("GL version: %s\nGL renderer: %s\nGL vendor: %s\nGL shading language version: %s\n", version, renderer, vendor, glsl_version);
-    printf("GL extensions:\n %s\n", extensions);
 
-    //glGetIntegerv(GL_NUM_EXTENSIONS, &extensions);
-    //for(int i = 0; i < extensions; i++)
-    //    printf("\t%s\n", (const char*)glGetStringi(GL_EXTENSIONS, i));
+#if defined(USE_OPENGL_33) || defined(USE_OPENGL_43) || defined(USE_OPENGL_45)
+    int extensions = 0;
+    glGetIntegerv(GL_NUM_EXTENSIONS, &extensions);
+    for(int i = 0; i < extensions; i++)
+        printf("\t%s\n", (const char*)glGetStringi(GL_EXTENSIONS, i));
+#else
+    const char *extensions = (const char*)glGetString(GL_EXTENSIONS);
+    printf("GL extensions:\n %s\n", extensions);
+#endif
 
     onInit();
 

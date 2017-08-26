@@ -17,11 +17,11 @@ GEN_HEADER = 'glcore.h'
 GEN_SOURCE = 'glcore.c'
 
 GL_DIRECTORIES = ['include/GL', 'src', 'spec']
-GL_HEADERS = [{'header': 'glcorearb.h', 'path': 'include/GL', 'url': 'http://www.opengl.org/registry/api/glcorearb.h'}]
+GL_HEADERS = [{'header': 'glcorearb.h', 'path': 'include/GL', 'url': 'https://www.khronos.org/registry/OpenGL/api/GL/glcorearb.h'}]
 ES2_DIRECTORIES = ['include/GLES2', 'src', 'include/KHR']
-ES2_HEADERS = [{'header': 'gl2.h', 'path': 'include/GLES2', 'url': 'https://www.khronos.org/registry/gles/api/GLES2/gl2.h'}, 
-{'header': 'gl2platform.h', 'path': 'include/GLES2', 'url': 'https://www.khronos.org/registry/gles/api/GLES2/gl2platform.h'},
-{'header': 'khrplatform.h', 'path': 'include/KHR', 'url': 'https://www.khronos.org/registry/egl/api/KHR/khrplatform.h'}]
+ES2_HEADERS = [{'header': 'gl2.h', 'path': 'include/GLES2', 'url': 'https://www.khronos.org/registry/OpenGL/api/GLES2/gl2.h'},
+{'header': 'gl2platform.h', 'path': 'include/GLES2', 'url': 'https://www.khronos.org/registry/OpenGL/api/GLES2/gl2platform.h'},
+{'header': 'khrplatform.h', 'path': 'include/KHR', 'url': 'https://www.khronos.org/registry/EGL/api/KHR/khrplatform.h'}]
 
 def noneStr(str):
     if (str):
